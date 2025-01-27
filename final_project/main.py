@@ -135,7 +135,7 @@ def get_all_papers(filename, topic):
 
 def main():
     # change filename here if needed
-    path = 'final_project/Data/50k/'
+    path = 'Data/50k/'
     filename = 'data_50k.pkl'
     name_data_filename = 'name_data_50k'
     kmeans_filename = '2/kmeans50k'
