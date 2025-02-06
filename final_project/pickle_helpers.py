@@ -1,5 +1,6 @@
 import pickle
 
+
 # Function to save data to a .pkl file
 def save_to_pkl(data, filename='final_project/data.pkl'):
     with open(filename, 'wb') as file:
