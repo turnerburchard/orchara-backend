@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 
-from cluster import Clusterer
-from embed import Embedder
+from backend.cluster import Clusterer
+from backend.embed import Embedder
 from pickle_helpers import load_from_pkl
 from search import find_target_cluster
 
