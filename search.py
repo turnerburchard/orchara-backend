@@ -6,8 +6,8 @@ from scipy.spatial.distance import cdist
 from scipy.cluster.hierarchy import to_tree
 
 # Data loading and model initialization
-FILENAME = '../final_project/Data/50k/data_50k.pkl'
-LINKAGE_FILE = '../final_project/Data/50k/280/agg50k'
+FILENAME = 'final_project/Data/50k/data_50k.pkl'
+LINKAGE_FILE = 'final_project/Data/50k/280/agg50k'
 all_papers = load_from_pkl(FILENAME)
 data = [paper.abstract_vector for paper in all_papers]
 linkage_matrix = load_from_pkl(LINKAGE_FILE).linkage_matrix
