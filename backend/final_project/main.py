@@ -5,7 +5,7 @@ from crossref.restful import Works, Etiquette
 from backend.cluster import Clusterer
 from backend.embed import Embedder
 
-from backend.data_store import Paper, Cluster, NammingData
+from data_store import Paper, Cluster, NammingData
 
 # temp stuff so we dont have to keep pinging api
 from pickle_helpers import save_to_pkl, load_from_pkl
