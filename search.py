@@ -1,64 +1,91 @@
-from cluster import Clusterer
-from embed import Embedder
-from pickle_helpers import load_from_pkl
+import json
 import numpy as np
-from scipy.spatial.distance import cdist
-from scipy.cluster.hierarchy import to_tree
+import hnswlib
+from sentence_transformers import SentenceTransformer
+import psycopg2
+from util import get_connection
 
-# Data loading and model initialization
-FILENAME = 'final_project/Data/50k/data_50k.pkl'
-LINKAGE_FILE = 'final_project/Data/50k/280/agg50k'
-all_papers = load_from_pkl(FILENAME)
-data = [paper.abstract_vector for paper in all_papers]
-linkage_matrix = load_from_pkl(LINKAGE_FILE).linkage_matrix
+# Global configuration
+INDEX_PATH = "../../orchera-etl/index/hnsw_index.bin"
+MAPPING_PATH = "../../orchera-etl/index/id_mapping.json"
+DIM = 384  # Dimensionality of your embeddings
 
-clusterer = Clusterer(data)
-transform = clusterer.reduce_dimensions(273)
-embedder = Embedder()
+# Load the SentenceTransformer model for query embeddings.
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-def find_target_cluster(linkage_matrix, query_vector, target_size, data, transform_vector, method='euclidean'):
+# Load the ID mapping from disk (maps internal index to paper id).
+with open(MAPPING_PATH, "r") as f:
+    id_map = json.load(f)
+num_elements = len(id_map)
+
+# Initialize and load the HNSWlib index.
+index = hnswlib.Index(space='cosine', dim=DIM)
+# Do not call init_index here; simply load the existing index.
+index.load_index(INDEX_PATH)
+index.set_ef(50)  # Adjust query-time parameter as needed
+
+
+def get_query_embedding(query):
     """
-    Traverse the hierarchical cluster tree to locate a cluster of approximate target size.
+    Encodes the query using SentenceTransformer and normalizes the result.
     """
-    def compute_centroid(cluster_node):
-        leaf_indices = cluster_node.pre_order()
-        return np.mean(data[leaf_indices], axis=0)
+    embedding = model.encode(query)
+    norm = np.linalg.norm(embedding)
+    return embedding / norm if norm > 0 else embedding
 
-    tree = to_tree(linkage_matrix, rd=False)
-    current_node = tree
-    query_vector = transform_vector(query_vector)
 
-    while True:
-        left, right = current_node.left, current_node.right
-        if len(current_node.pre_order()) <= target_size:
-            break
-
-        left_distance = cdist([query_vector], [compute_centroid(left)], metric=method)[0][0]
-        right_distance = cdist([query_vector], [compute_centroid(right)], metric=method)[0][0]
-        current_node = left if left_distance < right_distance else right
-
-    return current_node.pre_order()
-
-def search_api(query: str, cluster_size: int):
+def get_paper_details(paper_ids):
     """
-    Embed the query, locate the corresponding cluster, and return a list of paper metadata.
+    Given a list of paper_ids, queries PostgreSQL to retrieve paper details.
+    Assumes the papers table has columns 'id', 'title', 'abstract', and 'url'.
     """
-    query_vector = embedder.embed_text(query)
-    indices = find_target_cluster(linkage_matrix, query_vector, cluster_size, clusterer.data, transform)
+    conn = get_connection()
+    cur = conn.cursor()
+    # Fetch only the necessary columns for efficiency.
+    query = "SELECT id, title, abstract, url FROM public.papers WHERE id = ANY(%s)"
+    cur.execute(query, (paper_ids,))
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+    # Build a dictionary mapping paper_id to its details.
+    details = {
+        row[0]: {"title": row[1], "abstract": row[2], "url": row[3]}
+        for row in results
+    }
+    return details
+
+
+
+def search_api(query, cluster_size):
+    """
+    Given a query string and the desired number of neighbors (cluster_size),
+    returns a list of search results. Each result is a paper with various attributes
+    such as "title" and "abstract."
+    """
+    # Get the normalized embedding for the query.
+    query_embedding = get_query_embedding(query)
+    # Ensure the embedding has shape (1, DIM) as required by knn_query.
+    query_embedding = np.array([query_embedding], dtype=np.float32)
+    labels, distances = index.knn_query(query_embedding, k=cluster_size)
+
+    internal_ids = labels[0]  # Array of internal index numbers.
+    # Use the id_map to get the corresponding paper ids.
+    paper_ids = [id_map.get(str(internal_id)) for internal_id in internal_ids]
+
+    # Fetch additional paper details (e.g. title, abstract) from the database.
+    details_dict = get_paper_details(paper_ids)
+
     results = []
-    for i in indices:
-        paper = all_papers[i]
-        paper_data = {'title': paper.title}
-        if hasattr(paper, 'abstract'):
-            paper_data['abstract'] = paper.abstract
-        results.append(paper_data)
+    for i, internal_id in enumerate(internal_ids):
+        paper_id = paper_ids[i]
+        distance = distances[0][i]
+        paper_details = details_dict.get(paper_id, {})
+        result = {
+            "internal_id": int(internal_id),
+            "paper_id": paper_id,
+            "distance": float(distance),
+            "title": paper_details.get("title", ""),
+            "abstract": paper_details.get("abstract", "")
+        }
+        results.append(result)
     return results
-
-if __name__ == '__main__':
-    # Standalone test
-    test_query = "Searching research texts with hierarchical clustering"
-    test_cluster_size = 5
-    papers = search_api(test_query, test_cluster_size)
-    for paper in papers:
-        print(f"Title: {paper['title']}")
-        print(paper['url'])
