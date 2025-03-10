@@ -5,9 +5,9 @@ from sentence_transformers import SentenceTransformer
 from util import get_connection
 
 # Global configuration
-INDEX_PATH = "../../orchera-etl/index/hnsw_index.bin"
-MAPPING_PATH = "../../orchera-etl/index/id_mapping.json"
-DIM = 384  # Dimensionality of your embeddings
+INDEX_PATH = "index/hnsw_index.bin" # TODO fix this
+MAPPING_PATH = "index/id_mapping.json"
+DIM = 384
 
 # Load the SentenceTransformer model for query embeddings.
 model = SentenceTransformer('all-MiniLM-L6-v2')

@@ -43,3 +43,5 @@ hnswlib~=0.8.0
 sentence-transformers~=3.4.1
 openai~=1.61.1
 python-dotenv
+psycopg2
+flask_cors
