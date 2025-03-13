@@ -6,14 +6,20 @@ import os
 
 app = Flask(__name__)
 
-# Simplify CORS configuration - for development purposes
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["http://localhost:5001", "http://127.0.0.1:5001"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+# Configure CORS for development and production
+CORS(app, 
+     resources={r"/*": {
+         "origins": [
+             "http://localhost:5173",  # Vite dev server
+             "https://orchara.com",
+             "https://www.orchara.com",
+             "https://api.orchara.com"
+         ],
+         "methods": ["GET", "POST", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization"],
+         "expose_headers": ["Content-Type", "Authorization"],
+         "supports_credentials": True
+     }})
 
 @app.route('/api/search', methods=['POST'])
 def api_search():

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+    ports:
+      - "5001:5001"  # Expose the backend port
+    networks:
+      - orchara-network
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+networks:
+  orchara-network:
+    external: true
+    name: orchara-database_default  # Updated to match the actual network name 
