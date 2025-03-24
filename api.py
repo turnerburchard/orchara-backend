@@ -3,6 +3,9 @@ from search import search_api
 from summarize import Summarizer
 from flask_cors import CORS
 import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from util import get_connection
 
 app = Flask(__name__)
 
@@ -20,6 +23,20 @@ CORS(app,
          "expose_headers": ["Content-Type", "Authorization"],
          "supports_credentials": True
      }})
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM papers")
+            row_count = cur.fetchone()[0]
+        return jsonify({"rows_loaded": row_count})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 @app.route('/api/search', methods=['POST'])
 def api_search():
