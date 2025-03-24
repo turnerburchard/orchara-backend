@@ -45,3 +45,4 @@ openai~=1.61.1
 python-dotenv
 psycopg2
 flask_cors
+networkx~=3.2.1
