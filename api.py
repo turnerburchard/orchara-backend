@@ -42,8 +42,6 @@ def health_check():
 def api_search():
     print("\n=== New Search Request ===")
     print("Request received:", request)
-    print("Request headers:", dict(request.headers))
-    print("Request data:", request.get_data())
     
     try:
         payload = request.get_json()

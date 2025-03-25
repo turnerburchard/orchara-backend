@@ -11,8 +11,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - FLASK_APP=api.py
       - INDEX_PATH=/data/hnsw_index.bin
       - MAPPING_PATH=/data/id_mapping.json
     ports:
@@ -20,8 +21,10 @@ services:
     networks:
       - orchara-network
     volumes:
+      - .:/app
+      - /app/node_modules
       - orchara-database_index-data:/data
-    command: gunicorn --bind 0.0.0.0:5001 --workers 4 api:app
+    command: flask run --host=0.0.0.0 --port=5001 --reload
 
 networks:
   orchara-network:
