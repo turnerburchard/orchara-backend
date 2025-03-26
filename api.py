@@ -85,6 +85,43 @@ def api_summarize():
         print(e)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/summarize_papers', methods=['POST'])
+def api_summarize_papers():
+    print("\n=== New Summarize Papers Request ===")
+    print("Request received:", request)
+    
+    try:
+        payload = request.get_json()
+        print("Parsed JSON payload:", payload)
+    except Exception as e:
+        print("Error parsing JSON:", str(e))
+        return jsonify({'error': 'Invalid JSON payload'}), 400
+
+    if not payload or 'papers' not in payload:
+        print("Missing required parameters")
+        return jsonify({'error': 'Parameter "papers" is required.'}), 400
+
+    papers = payload['papers']
+    if not isinstance(papers, list) or len(papers) == 0:
+        print("Invalid papers parameter")
+        return jsonify({'error': '"papers" must be a non-empty list of paper objects.'}), 400
+        
+    # Validate paper objects
+    required_fields = ['paper_id', 'title', 'abstract', 'url']
+    for paper in papers:
+        for field in required_fields:
+            if field not in paper:
+                return jsonify({'error': f'Each paper must have "{field}" field.'}), 400
+    
+    summarizer = Summarizer()
+    try:
+        result = summarizer.summarize_with_citations(papers)
+        print("Summarization result:", result)
+        return jsonify(result)
+    except Exception as e:
+        print("Summarization error:", str(e))
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
 

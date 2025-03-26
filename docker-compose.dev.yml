@@ -16,6 +16,7 @@ services:
       - FLASK_APP=api.py
       - INDEX_PATH=/data/hnsw_index.bin
       - MAPPING_PATH=/data/id_mapping.json
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
       - "5001:5001"
     networks:

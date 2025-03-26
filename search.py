@@ -31,7 +31,7 @@ STOP_WORDS = {
 SEMANTIC_WEIGHT = 0.4  # Weight for semantic similarity in final score
 KEYWORD_WEIGHT = 0.5   # Weight for keyword relevance to search query
 DIVERSITY_WEIGHT = 0.1  # Weight for diversity in final score
-RESULTS_MULTIPLIER = 10  # Fetch 2x more results than requested to have a larger pool
+RESULTS_MULTIPLIER = 10  # Fetch more results than requested to have a larger pool
                        # for scoring. This ensures we can select diverse papers
                        # even if some highly similar papers are in the top results.
 
