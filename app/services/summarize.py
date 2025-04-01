@@ -1,42 +1,38 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 import os
 from dotenv import load_dotenv
 from app.api.models import Paper
-from pathlib import Path
+from app.services.prompts import get_summary_prompt, get_summary_with_citations_prompt, get_summary_system_prompt
 
 class Summarizer:
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Summarizer, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        load_dotenv()  # Load environment variables
-        self.testing_mode = os.getenv('TESTING_MODE', 'false').lower() == 'true'
-        
-        if not self.testing_mode:
+        if not self._initialized:
+            load_dotenv()  # Load environment variables
             api_key = os.getenv('OPENAI_API_KEY')
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is not set")
-            self.client = OpenAI(api_key=api_key)
-            
-        # Load test data
-        test_data_path = Path(__file__).parent.parent / 'test_data' / 'summaries.json'
-        if test_data_path.exists():
-            with open(test_data_path) as f:
-                self.test_data = json.load(f)
-        else:
-            self.test_data = {}
+            self.client = AsyncOpenAI(api_key=api_key)
+            self._initialized = True
 
-    def summarize(self, text):
-        if self.testing_mode:
-            return "This is a test summary of the provided text. It demonstrates the functionality of the summarization service without making actual API calls."
-        else:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": f"You are a researcher, accurately summarize the following set of research papers into a single paragraph: {text}"}
-                ]
-            )
-            return response.choices[0].message.content
+    async def summarize(self, text):
+        response = await self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": get_summary_prompt(text)}
+            ]
+        )
+        return response.choices[0].message.content
         
-    def summarize_with_citations(self, papers: list[Paper]):
+    async def summarize_with_citations(self, papers: list[Paper], query: str = None):
         """
         Generate a summary with citations for a list of papers.
         
@@ -46,29 +42,13 @@ class Summarizer:
                 - title: paper title
                 - abstract: paper abstract
                 - url: link to the paper
+            query: the original search query that led to these papers
                 
         Returns:
             dict with:
                 - summary: text with citations in {{cite:X}} format
                 - citations: list of citation objects with paper details
         """
-        if self.testing_mode:
-            # Use test data based on number of papers
-            if len(papers) == 1:
-                test_result = self.test_data.get('single_paper', self._generate_test_result(papers))
-            else:
-                test_result = self.test_data.get('multiple_papers', self._generate_test_result(papers))
-            
-            # Update paper IDs and URLs to match actual papers
-            for i, paper in enumerate(papers, 1):
-                for citation in test_result['citations']:
-                    if citation['id'] == i:
-                        citation['paper_id'] = paper.paper_id
-                        citation['title'] = paper.title
-                        citation['url'] = paper.url
-            
-            return test_result
-            
         # Format papers for the prompt
         formatted_papers = []
         for i, paper in enumerate(papers, 1):
@@ -76,35 +56,14 @@ class Summarizer:
         
         papers_text = "\n\n".join(formatted_papers)
         
-        # Create the prompt
-        prompt = f"""Analyze these research papers and provide:
-        1. A 2-paragraph summary that synthesizes the main findings
-        2. For each key point, cite exactly ONE paper number using {{{{cite:X}}}} format
-           - Do not combine multiple papers in a single citation
-           - Each citation should reference a single paper
-        
-        YOUR RESPONSE MUST BE IN THIS JSON FORMAT:
-        {{
-            "summary": "The synthesized text with citations marked as {{{{cite:X}}}}",
-            "citations": [
-                {{
-                    "id": 1,  // Single paper number only
-                    "context": "Brief description of what you're citing"
-                }}
-            ]
-        }}
-
-        Papers to analyze:
-        {papers_text}"""
-
         # Make the API call
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 response_format={"type": "json_object"},  # Force JSON response
                 messages=[
-                    {"role": "system", "content": "You are a research assistant that produces structured summaries with precise citations. Each citation must reference exactly one paper."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": get_summary_system_prompt()},
+                    {"role": "user", "content": get_summary_with_citations_prompt(papers_text, query)}
                 ]
             )
             
@@ -129,8 +88,12 @@ class Summarizer:
                         "context": citation.get("context", "")
                     })
             
+            # Clean up the summary text by removing spaces before periods
+            summary_text = result.get("summary", "")
+            summary_text = summary_text.replace(" .", ".")
+            
             return {
-                "summary": result.get("summary", ""),
+                "summary": summary_text,
                 "citations": processed_citations
             }
             
@@ -139,24 +102,4 @@ class Summarizer:
                 "summary": f"Error generating summary: {str(e)}",
                 "citations": []
             }
-            
-    def _generate_test_result(self, papers: list[Paper]):
-        """Generate a test result if no matching test data is found"""
-        citations = []
-        summary_parts = []
-        
-        for i, paper in enumerate(papers, 1):
-            citations.append({
-                "id": i,
-                "paper_id": paper.paper_id,
-                "title": paper.title,
-                "url": paper.url,
-                "context": f"Key finding from paper {i}"
-            })
-            summary_parts.append(f"This paper discusses {paper.title} {{cite:{i}}}")
-        
-        return {
-            "summary": " ".join(summary_parts),
-            "citations": citations
-        }
 

@@ -15,4 +15,5 @@ class Paper(BaseModel):
     url: str
 
 class SummarizePapersRequest(BaseModel):
-    papers: List[Paper] 
+    papers: list[Paper]
+    query: str | None = None 
