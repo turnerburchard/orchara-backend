@@ -6,7 +6,6 @@ from app.api.routes import health, search, summarize
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API for paper search and summarization",
-    version=settings.VERSION
 )
 
 # Configure CORS

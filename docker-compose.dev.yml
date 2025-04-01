@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -11,21 +9,21 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      - FLASK_APP=api.py
       - INDEX_PATH=/data/hnsw_index.bin
       - MAPPING_PATH=/data/id_mapping.json
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TESTING_MODE=true
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
     ports:
       - "5001:5001"
     networks:
       - orchara-network
     volumes:
-      - .:/app
-      - /app/node_modules
       - orchara-database_index-data:/data
-    command: flask run --host=0.0.0.0 --port=5001 --reload
+      - ./app:/app/app  # Mount app directory for live updates
+      - ./tests:/app/tests  # Mount tests directory
+      - ./main.py:/app/main.py  # Mount main.py
+    command: uvicorn main:app --host 0.0.0.0 --port 5001 --workers 1 --reload --reload-dir /app
 
 networks:
   orchara-network:

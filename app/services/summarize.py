@@ -2,21 +2,31 @@ from openai import OpenAI
 import json
 import os
 from dotenv import load_dotenv
-
-# TODO turn into common State class which passes to all instances?
-testing_mode = False
+from app.api.models import Paper
+from pathlib import Path
 
 class Summarizer:
     def __init__(self):
         load_dotenv()  # Load environment variables
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.client = OpenAI(api_key=api_key)
+        self.testing_mode = os.getenv('TESTING_MODE', 'false').lower() == 'true'
+        
+        if not self.testing_mode:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is not set")
+            self.client = OpenAI(api_key=api_key)
+            
+        # Load test data
+        test_data_path = Path(__file__).parent.parent / 'test_data' / 'summaries.json'
+        if test_data_path.exists():
+            with open(test_data_path) as f:
+                self.test_data = json.load(f)
+        else:
+            self.test_data = {}
 
     def summarize(self, text):
-        if testing_mode:
-            summary = "The research papers explore machine learning algorithms, categorizing and comparing their performance in supervised settings. They survey applications of these algorithms, focusing on the fundamental components and principles of machine learning workflows that handle both numerical and categorical data. This summary highlights essential insights into algorithm effectiveness and data processing methodologies."
+        if self.testing_mode:
+            return "This is a test summary of the provided text. It demonstrates the functionality of the summarization service without making actual API calls."
         else:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -24,16 +34,14 @@ class Summarizer:
                     {"role": "user", "content": f"You are a researcher, accurately summarize the following set of research papers into a single paragraph: {text}"}
                 ]
             )
-            summary = response.choices[0].message.content
-
-        return summary
+            return response.choices[0].message.content
         
-    def summarize_with_citations(self, papers):
+    def summarize_with_citations(self, papers: list[Paper]):
         """
         Generate a summary with citations for a list of papers.
         
         Args:
-            papers: list of dicts, each with keys:
+            papers: list of Pydantic Paper models, each with:
                 - paper_id: unique identifier
                 - title: paper title
                 - abstract: paper abstract
@@ -44,41 +52,27 @@ class Summarizer:
                 - summary: text with citations in {{cite:X}} format
                 - citations: list of citation objects with paper details
         """
-        if testing_mode:
-            return {
-                "summary": "Recent advances in machine learning models have shown significant improvements in natural language processing tasks {{cite:1}}. These models utilize transformer architectures to achieve state-of-the-art results on benchmark datasets {{cite:2}}. Despite these advances, challenges remain in computational efficiency {{cite:4}} and handling of long-form text {{cite:5}}.",
-                "citations": [
-                    {
-                        "id": 1,
-                        "paper_id": papers[0]['paper_id'],
-                        "title": papers[0]['title'],
-                        "url": papers[0]['url']
-                    },
-                    {
-                        "id": 2,
-                        "paper_id": papers[1]['paper_id'],
-                        "title": papers[1]['title'],
-                        "url": papers[1]['url']
-                    },
-                    {
-                        "id": 4,
-                        "paper_id": papers[3]['paper_id'],
-                        "title": papers[3]['title'],
-                        "url": papers[3]['url']
-                    },
-                    {
-                        "id": 5,
-                        "paper_id": papers[4]['paper_id'],
-                        "title": papers[4]['title'],
-                        "url": papers[4]['url']
-                    }
-                ]
-            }
+        if self.testing_mode:
+            # Use test data based on number of papers
+            if len(papers) == 1:
+                test_result = self.test_data.get('single_paper', self._generate_test_result(papers))
+            else:
+                test_result = self.test_data.get('multiple_papers', self._generate_test_result(papers))
+            
+            # Update paper IDs and URLs to match actual papers
+            for i, paper in enumerate(papers, 1):
+                for citation in test_result['citations']:
+                    if citation['id'] == i:
+                        citation['paper_id'] = paper.paper_id
+                        citation['title'] = paper.title
+                        citation['url'] = paper.url
+            
+            return test_result
             
         # Format papers for the prompt
         formatted_papers = []
         for i, paper in enumerate(papers, 1):
-            formatted_papers.append(f"Paper {i}: \"{paper['title']}\"\nAbstract: {paper['abstract']}\n")
+            formatted_papers.append(f"Paper {i}: \"{paper.title}\"\nAbstract: {paper.abstract}\n")
         
         papers_text = "\n\n".join(formatted_papers)
         
@@ -129,9 +123,9 @@ class Summarizer:
                 if 0 <= idx < len(papers):
                     processed_citations.append({
                         "id": id_num,
-                        "paper_id": papers[idx]['paper_id'],
-                        "title": papers[idx]['title'],
-                        "url": papers[idx]['url'],
+                        "paper_id": papers[idx].paper_id,
+                        "title": papers[idx].title,
+                        "url": papers[idx].url,
                         "context": citation.get("context", "")
                     })
             
@@ -145,4 +139,24 @@ class Summarizer:
                 "summary": f"Error generating summary: {str(e)}",
                 "citations": []
             }
+            
+    def _generate_test_result(self, papers: list[Paper]):
+        """Generate a test result if no matching test data is found"""
+        citations = []
+        summary_parts = []
+        
+        for i, paper in enumerate(papers, 1):
+            citations.append({
+                "id": i,
+                "paper_id": paper.paper_id,
+                "title": paper.title,
+                "url": paper.url,
+                "context": f"Key finding from paper {i}"
+            })
+            summary_parts.append(f"This paper discusses {paper.title} {{cite:{i}}}")
+        
+        return {
+            "summary": " ".join(summary_parts),
+            "citations": citations
+        }
 
