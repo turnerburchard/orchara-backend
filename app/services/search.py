@@ -2,7 +2,7 @@ import json
 import numpy as np
 import hnswlib
 from sentence_transformers import SentenceTransformer
-from util import get_connection
+from app.utils.db import get_connection
 from collections import defaultdict
 import re
 import os

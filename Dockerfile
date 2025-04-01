@@ -11,4 +11,5 @@ COPY . .
 
 EXPOSE 5001
 
-CMD ["python", "api.py"]
+# Use uvicorn with production settings
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001", "--workers", "4"]

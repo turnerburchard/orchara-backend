@@ -11,8 +11,6 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
       - INDEX_PATH=/data/hnsw_index.bin
       - MAPPING_PATH=/data/id_mapping.json
     ports:
@@ -21,7 +19,7 @@ services:
       - orchara-network
     volumes:
       - orchara-database_index-data:/data
-    command: gunicorn --bind 0.0.0.0:5001 --workers 4 api:app
+    command: uvicorn main:app --host 0.0.0.0 --port 5001 --workers 4 --reload
 
 networks:
   orchara-network:
