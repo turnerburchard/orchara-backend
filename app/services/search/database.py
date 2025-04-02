@@ -1,7 +1,7 @@
 from typing import Dict, List
 from app.utils.db import get_async_connection
 from .config import SearchConfig
-from app.api.models import Paper
+from app.models import Paper
 
 class DatabaseService:
     def __init__(self, config: SearchConfig):

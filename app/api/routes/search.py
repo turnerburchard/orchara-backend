@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.api.models import SearchRequest
+from app.models import SearchRequest
 from app.services.search import SearchService, default_config
 
 router = APIRouter()
