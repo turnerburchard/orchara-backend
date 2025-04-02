@@ -5,8 +5,8 @@ from typing import Set
 @dataclass
 class SearchConfig:
     # Paths
-    INDEX_PATH: str = os.environ.get('INDEX_PATH', 'index/hnsw_index.bin')
-    MAPPING_PATH: str = os.environ.get('MAPPING_PATH', 'index/id_mapping.json')
+    INDEX_PATH: str = field(default_factory=lambda: os.environ.get('INDEX_PATH', '/data/hnsw_index.bin'))
+    MAPPING_PATH: str = field(default_factory=lambda: os.environ.get('MAPPING_PATH', '/data/id_mapping.json'))
     
     # Model settings
     DIM: int = 384

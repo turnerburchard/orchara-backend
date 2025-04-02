@@ -23,8 +23,8 @@ class SearchResult(BaseModel):
     paper_id: str
     semantic_score: float
     keyword_score: float
-    diversity_score: float
-    final_score: float
+    diversity_score: float = 0.0  # Default value
+    final_score: float = 0.0  # Default value
     title: str
     abstract: str
     url: str

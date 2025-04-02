@@ -10,5 +10,7 @@ async def api_search(request: SearchRequest):
     try:
         results = await search_service.search(request.query, request.cluster_size)
         return {"results": results}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 

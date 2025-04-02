@@ -2,7 +2,7 @@ import re
 from collections import defaultdict
 from typing import List, Set
 from .config import SearchConfig
-from app.api.models import SearchResult
+from app.models import SearchResult
 import asyncio
 
 class ScoringService:
