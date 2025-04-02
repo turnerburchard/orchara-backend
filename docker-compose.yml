@@ -19,7 +19,7 @@ services:
     volumes:
       - orchara-database_index-data:/data
       - ./.env:/app/.env
-    command: uvicorn main:app --host 0.0.0.0 --port 5001 --workers 4 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 5001 --workers 4
 
 networks:
   orchara-network:

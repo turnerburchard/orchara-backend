@@ -20,9 +20,11 @@ services:
       - orchara-network
     volumes:
       - orchara-database_index-data:/data
-      - ./app:/app/app  # Mount app directory for live updates
-      - ./tests:/app/tests  # Mount tests directory
-      - ./main.py:/app/main.py  # Mount main.py
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - ./main.py:/app/main.py
+      - ./requirements.txt:/app/requirements.txt
+      - ./.env:/app/.env
     command: uvicorn main:app --host 0.0.0.0 --port 5001 --workers 1 --reload --reload-dir /app
 
 networks:
