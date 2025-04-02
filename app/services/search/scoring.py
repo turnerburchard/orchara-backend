@@ -2,7 +2,8 @@ import re
 from collections import defaultdict
 from typing import List, Set
 from .config import SearchConfig
-from app.models import SearchResult
+from app.api.models import SearchResult
+import asyncio
 
 class ScoringService:
     def __init__(self, config: SearchConfig):
@@ -17,13 +18,15 @@ class ScoringService:
                 if word not in self.config.STOP_WORDS 
                 and len(word) > self.config.MIN_KEYWORD_LENGTH]
 
-    def calculate_keyword_relevance(self, query: str, text: str) -> float:
+    async def calculate_keyword_relevance(self, query: str, text: str) -> float:
         """Calculate how relevant the text is to the search query based on keyword overlap"""
         if not text:
             return 0.0
             
-        query_keywords = set(self.extract_keywords(query))
-        text_keywords = set(self.extract_keywords(text))
+        # Run CPU-bound operations in thread pool
+        loop = asyncio.get_event_loop()
+        query_keywords = await loop.run_in_executor(None, lambda: set(self.extract_keywords(query)))
+        text_keywords = await loop.run_in_executor(None, lambda: set(self.extract_keywords(text)))
         
         if not query_keywords or not text_keywords:
             return 0.0
@@ -33,14 +36,18 @@ class ScoringService:
         
         return overlap / total if total > 0 else 0.0
 
-    def calculate_diversity_score(self, results: List[SearchResult]) -> List[float]:
+    async def calculate_diversity_score(self, results: List[SearchResult]) -> List[float]:
         """Calculate diversity score based on keyword overlap"""
         if not results:
             return []
         
+        # Run CPU-bound operations in thread pool
+        loop = asyncio.get_event_loop()
+        
+        # Extract keywords from all abstracts
         all_keywords = []
         for result in results:
-            keywords = self.extract_keywords(result.abstract)
+            keywords = await loop.run_in_executor(None, self.extract_keywords, result.abstract)
             all_keywords.extend(keywords)
         
         keyword_counts = defaultdict(int)
@@ -49,16 +56,16 @@ class ScoringService:
         
         diversity_scores = []
         for result in results:
-            keywords = self.extract_keywords(result.abstract)
+            keywords = await loop.run_in_executor(None, self.extract_keywords, result.abstract)
             avg_frequency = sum(keyword_counts[k] for k in keywords) / len(keywords) if keywords else 0
             diversity_score = 1 / (1 + avg_frequency)
             diversity_scores.append(diversity_score)
         
         return diversity_scores
 
-    def calculate_final_scores(self, results: List[SearchResult]) -> List[SearchResult]:
+    async def calculate_final_scores(self, results: List[SearchResult]) -> List[SearchResult]:
         """Calculate final scores combining semantic, keyword, and diversity scores"""
-        diversity_scores = self.calculate_diversity_score(results)
+        diversity_scores = await self.calculate_diversity_score(results)
         
         for i, result in enumerate(results):
             result.diversity_score = diversity_scores[i]

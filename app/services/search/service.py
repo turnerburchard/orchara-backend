@@ -3,10 +3,11 @@ import numpy as np
 import hnswlib
 from typing import List
 from .config import SearchConfig, default_config
-from app.models import SearchResult
+from app.api.models import SearchResult
 from .embedding import EmbeddingService
 from .scoring import ScoringService
 from .database import DatabaseService
+import asyncio
 
 class SearchService:
     def __init__(self, config: SearchConfig = default_config):
@@ -24,13 +25,14 @@ class SearchService:
         self.index.load_index(config.INDEX_PATH)
         self.index.set_ef(config.HNSW_EF)
 
-    def search(self, query: str, cluster_size: int) -> List[SearchResult]:
+    async def search(self, query: str, cluster_size: int) -> List[SearchResult]:
         """Returns up to `cluster_size` results, using semantic similarity,
         keyword matching, and diversity scoring."""
         try:
             print(f"Processing search query: '{query}' with cluster_size: {cluster_size}")
             
-            query_embedding = self.embedding_service.get_query_embedding(query)
+            # Get query embedding
+            query_embedding = await self.embedding_service.get_query_embedding(query)
             query_embedding = np.array([query_embedding], dtype=np.float32)
             
             results = []
@@ -43,7 +45,12 @@ class SearchService:
                 
                 print(f"Attempt {attempt + 1}: Querying index with k={k}")
                 
-                labels, distances = self.index.knn_query(query_embedding, k=k)
+                # Run HNSW search in thread pool since it's CPU-bound
+                loop = asyncio.get_event_loop()
+                labels, distances = await loop.run_in_executor(
+                    None, 
+                    lambda: self.index.knn_query(query_embedding, k=k)
+                )
                 
                 # Convert internal IDs to paper IDs
                 internal_ids = labels[0]
@@ -52,7 +59,7 @@ class SearchService:
                 print(f"Found {len(paper_ids)} potential matches")
                 
                 # Fetch papers with optional abstract filtering
-                details_dict = self.database_service.get_paper_details(paper_ids)
+                details_dict = await self.database_service.get_paper_details(paper_ids)
                 
                 print(f"Retrieved {len(details_dict)} papers")
                 
@@ -66,7 +73,7 @@ class SearchService:
                     if paper_id in details_dict:
                         paper_details = details_dict[paper_id]
                         # Calculate keyword relevance score
-                        keyword_score = self.scoring_service.calculate_keyword_relevance(query, paper_details.abstract)
+                        keyword_score = await self.scoring_service.calculate_keyword_relevance(query, paper_details.abstract)
                         
                         results.append(SearchResult(
                             internal_id=int(internal_id),
@@ -86,7 +93,7 @@ class SearchService:
                 return []
             
             # Calculate final scores and sort
-            results = self.scoring_service.calculate_final_scores(results)
+            results = await self.scoring_service.calculate_final_scores(results)
             results.sort(key=lambda x: x.final_score, reverse=True)
             return results[:cluster_size]
         
