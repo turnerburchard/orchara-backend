@@ -36,6 +36,8 @@ class SearchService:
         """Returns up to `cluster_size` results, using semantic similarity,
         keyword matching, and diversity scoring."""
         try:
+            query = self.validate_query(query)
+            
             print(f"Processing search query: '{query}' with cluster_size: {cluster_size}")
 
             query_embedding = await self.embedding_service.get_embedding_async(query, normalize=True)
@@ -174,6 +176,8 @@ class SearchService:
             print(f"Returning {min(len(cumulative_results), cluster_size)} results after sorting.")
             return cumulative_results[:cluster_size]
 
+        except ValueError as ve:
+            raise ve
         except Exception as e:
             print(f"Error during search execution: {str(e)}")
             import traceback
