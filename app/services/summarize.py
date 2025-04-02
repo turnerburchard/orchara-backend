@@ -2,8 +2,9 @@ from openai import AsyncOpenAI
 import json
 import os
 from dotenv import load_dotenv
-from app.api.models import Paper
+from app.models import Paper, Citation, SummaryResult
 from app.services.prompts import get_summary_prompt, get_summary_with_citations_prompt, get_summary_system_prompt
+from typing import List
 
 class Summarizer:
     _instance = None
@@ -32,7 +33,7 @@ class Summarizer:
         )
         return response.choices[0].message.content
         
-    async def summarize_with_citations(self, papers: list[Paper], query: str = None):
+    async def summarize_with_citations(self, papers: list[Paper], query: str = None) -> SummaryResult:
         """
         Generate a summary with citations for a list of papers.
         
@@ -71,7 +72,7 @@ class Summarizer:
             result = json.loads(response.choices[0].message.content)
             
             # Process citations to include full paper info
-            processed_citations = []
+            processed_citations: List[Citation] = []
             for citation in result.get("citations", []):
                 # Ensure we have a single ID
                 id_num = citation["id"]
@@ -80,26 +81,26 @@ class Summarizer:
                     
                 idx = id_num - 1
                 if 0 <= idx < len(papers):
-                    processed_citations.append({
-                        "id": id_num,
-                        "paper_id": papers[idx].paper_id,
-                        "title": papers[idx].title,
-                        "url": papers[idx].url,
-                        "context": citation.get("context", "")
-                    })
+                    processed_citations.append(Citation(
+                        id=id_num,
+                        paper_id=papers[idx].paper_id,
+                        title=papers[idx].title,
+                        url=papers[idx].url,
+                        context=citation.get("context", "")
+                    ))
             
             # Clean up the summary text by removing spaces before periods
             summary_text = result.get("summary", "")
             summary_text = summary_text.replace(" .", ".")
             
-            return {
-                "summary": summary_text,
-                "citations": processed_citations
-            }
+            return SummaryResult(
+                summary=summary_text,
+                citations=processed_citations
+            )
             
         except Exception as e:
-            return {
-                "summary": f"Error generating summary: {str(e)}",
-                "citations": []
-            }
+            return SummaryResult(
+                summary=f"Error generating summary: {str(e)}",
+                citations=[]
+            )
 

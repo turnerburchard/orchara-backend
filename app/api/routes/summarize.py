@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.api.models import SummarizeRequest, SummarizePapersRequest
+from app.models import SummarizeRequest, SummarizePapersRequest
 from app.services.summarize import Summarizer
 import logging
 from typing import List
