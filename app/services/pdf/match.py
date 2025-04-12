@@ -1,0 +1,67 @@
+"""
+This module contains the logic for matching a PDF to a paper in the database.
+"""
+
+from pydantic import BaseModel
+from typing import Optional
+from app.services.database import DatabaseService
+from app.services.pdf.text_extraction import TextExtractionService
+from app.services.pdf.file import PDFFile
+
+class MatchResult(BaseModel):
+    found: bool
+    paper_id: Optional[str] = None
+    confidence: float = 0.0
+    error: Optional[str] = None
+
+class MatchService:
+    def __init__(self):
+        self.db = DatabaseService()
+        self.text_service = TextExtractionService()
+    
+    async def match_paper(self, pdf_file: PDFFile) -> MatchResult:
+        """
+        Attempts to match a PDF file to an existing paper in the database.
+        Returns MatchResult with match status and paper_id if found.
+        """
+        try:
+            # Extract metadata from PDF
+            metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
+            if not metadata:
+                return MatchResult(
+                    found=False,
+                    error="Could not extract metadata from PDF"
+                )
+            
+            # Try DOI match first
+            if "doi" in metadata:
+                paper_id = await self.match_by_doi(metadata["doi"])
+                if paper_id:
+                    return MatchResult(
+                        found=True,
+                        paper_id=paper_id,
+                        confidence=1.0  # DOI match is exact
+                    )
+            
+            # TODO: Try title match if DOI match fails
+            return MatchResult(found=False)
+            
+        except Exception as e:
+            return MatchResult(
+                found=False,
+                error=f"Error matching paper: {str(e)}"
+            )
+    
+    async def match_by_doi(self, doi: str) -> Optional[str]:
+        """
+        Matches a DOI to a paper_id in the database.
+        Returns paper_id if found, None otherwise.
+        """
+        await self.db.connect()
+        try:
+            # TODO: Add doi column to papers table and implement DOI lookup
+            # For now, return None as we don't have DOI support yet
+            return None
+        except Exception as e:
+            print(f"Error matching DOI: {str(e)}")
+            return None

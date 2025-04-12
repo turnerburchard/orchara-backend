@@ -41,4 +41,10 @@ class Citation(BaseModel):
 
 class SummaryResult(BaseModel):
     summary: str
-    citations: List[Citation] 
+    citations: List[Citation]
+
+class PDFUploadResult(BaseModel):
+    success: bool
+    paper: Paper
+    missing_doi: bool = True 
+    error: Optional[str] = None  

@@ -1,3 +1,1 @@
-from app.api.routes import router
-
-app = router 
+from app.api.routes import app

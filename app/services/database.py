@@ -67,4 +67,59 @@ class DatabaseService:
             }
         except Exception as e:
             print(f"Database error: {str(e)}")
-            return None 
+            return None
+
+    async def update_paper(self, paper: Dict[str, Any]) -> bool:
+        """Update an existing paper."""
+        await self.connect()
+        try:
+            await self.connection.execute(
+                """
+                UPDATE papers 
+                SET title = $1, abstract = $2, url = $3
+                WHERE id = $4
+                """,
+                paper['title'],
+                paper['abstract'],
+                paper['url'],
+                paper['paper_id']
+            )
+            return True
+        except Exception as e:
+            print(f"Database error: {str(e)}")
+            return False
+
+    async def create_paper(self, paper: Dict[str, Any]) -> bool:
+        """Create a new paper."""
+        await self.connect()
+        try:
+            await self.connection.execute(
+                """
+                INSERT INTO papers (id, title, abstract, url)
+                VALUES ($1, $2, $3, $4)
+                """,
+                paper['paper_id'],
+                paper['title'],
+                paper['abstract'],
+                paper['url']
+            )
+            return True
+        except Exception as e:
+            print(f"Database error: {str(e)}")
+            return False
+            
+    async def delete_paper(self, paper_id: str) -> bool:
+        """Delete a paper by ID."""
+        await self.connect()
+        try:
+            await self.connection.execute(
+                """
+                DELETE FROM papers 
+                WHERE id = $1
+                """,
+                paper_id
+            )
+            return True
+        except Exception as e:
+            print(f"Database error: {str(e)}")
+            return False 

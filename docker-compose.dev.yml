@@ -20,6 +20,7 @@ services:
       - orchara-network
     volumes:
       - orchara-database_index-data:/data
+      - orchara-uploads:/app/uploads
       - ./app:/app/app
       - ./tests:/app/tests
       - ./main.py:/app/main.py
@@ -34,4 +35,6 @@ networks:
 
 volumes:
   orchara-database_index-data:
-    external: true 
+    external: true
+  orchara-uploads:
+    name: orchara-uploads 
