@@ -114,7 +114,23 @@ class TextExtractionService:
 
     def _clean_text(self, text: str) -> str:
         """Remove extra whitespace and normalize text."""
-        return " ".join(text.split()).strip()
+        try:
+            # Handle potential bytes input
+            if isinstance(text, bytes):
+                text = text.decode('utf-8', errors='replace')
+            
+            # Handle potential None or non-string input
+            if text is None:
+                return ""
+                
+            # Replace null bytes and other problematic characters
+            text = text.replace('\x00', '')
+            
+            # Normalize whitespace
+            return " ".join(text.split()).strip()
+        except Exception as e:
+            print(f"Error cleaning text: {str(e)}")
+            return ""
 
     async def extract_full_text_from_pdf(self, pdf_file: PDFFile) -> Optional[str]:
         """Extract full text from all pages of a PDF."""
