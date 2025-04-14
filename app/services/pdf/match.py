@@ -11,6 +11,8 @@ from app.services.pdf.file import PDFFile
 class MatchResult(BaseModel):
     found: bool
     paper_id: Optional[str] = None
+    title: Optional[str] = None
+    abstract: Optional[str] = None
     confidence: float = 0.0
     error: Optional[str] = None
 
@@ -37,11 +39,16 @@ class MatchService:
             if "doi" in metadata:
                 paper_id = await self.match_by_doi(metadata["doi"])
                 if paper_id:
-                    return MatchResult(
-                        found=True,
-                        paper_id=paper_id,
-                        confidence=1.0  # DOI match is exact
-                    )
+                    # Get paper details from database
+                    paper = await self.db.get_paper_by_id(paper_id)
+                    if paper:
+                        return MatchResult(
+                            found=True,
+                            paper_id=paper_id,
+                            title=paper['title'],
+                            abstract=paper['abstract'],
+                            confidence=1.0  # DOI match is exact
+                        )
             
             # TODO: Try title match if DOI match fails
             return MatchResult(found=False)
