@@ -4,20 +4,23 @@ from datetime import datetime
 from app.services.pdf.file import PDFFile
 from typing import List, Dict, Any
 
+
+# TODO allow for persistent cloud storage
 class LocalStorage:
     def __init__(self, base_path: str = "/app/uploads"):
         self.base_path = base_path
-        # Ensure base directory exists with proper permissions
         os.makedirs(self.base_path, exist_ok=True)
-        os.chmod(self.base_path, 0o777)  # Ensure write permissions
+        os.chmod(self.base_path, 0o777) 
         
     def _get_user_path(self, user_id: str) -> str:
         """Get the base path for a user's uploads"""
         user_path = os.path.join(self.base_path, user_id)
         os.makedirs(user_path, exist_ok=True)
-        os.chmod(user_path, 0o777)  # Ensure write permissions
+        os.chmod(user_path, 0o777)
         return user_path
     
+
+    # TODO move to database
     def _get_mapping_path(self, user_id: str) -> str:
         """Get the path to the user's paper ID mapping file"""
         return os.path.join(self._get_user_path(user_id), "paper_mapping.json")
@@ -58,14 +61,12 @@ class LocalStorage:
         storage_path = self._generate_storage_path(pdf_file)
         full_path = os.path.join(self.base_path, storage_path)
         
-        # Ensure directory exists with proper permissions
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         os.chmod(os.path.dirname(full_path), 0o777)
         
         with open(full_path, "wb") as f:
             f.write(content)
         
-        # Update the mapping
         mapping = self._load_mapping(pdf_file.user_id)
         mapping[os.path.basename(full_path)] = paper_id
         self._save_mapping(pdf_file.user_id, mapping)
@@ -78,7 +79,6 @@ class LocalStorage:
             user_path = self._get_user_path(user_id)
             mapping = self._load_mapping(user_id)
             
-            # Find the filename associated with this paper_id
             filename = None
             for fname, pid in mapping.items():
                 if pid == paper_id:

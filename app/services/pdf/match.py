@@ -27,7 +27,6 @@ class MatchService:
         Returns MatchResult with match status and paper_id if found.
         """
         try:
-            # Extract metadata from PDF
             metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
             if not metadata:
                 return MatchResult(
@@ -35,11 +34,9 @@ class MatchService:
                     error="Could not extract metadata from PDF"
                 )
             
-            # Try DOI match first
             if "doi" in metadata:
                 paper_id = await self.match_by_doi(metadata["doi"])
                 if paper_id:
-                    # Get paper details from database
                     paper = await self.db.get_paper_by_id(paper_id)
                     if paper:
                         return MatchResult(
@@ -47,7 +44,7 @@ class MatchService:
                             paper_id=paper_id,
                             title=paper['title'],
                             abstract=paper['abstract'],
-                            confidence=1.0  # DOI match is exact
+                            confidence=1.0  
                         )
             
             # TODO: Try title match if DOI match fails
@@ -59,16 +56,3 @@ class MatchService:
                 error=f"Error matching paper: {str(e)}"
             )
     
-    async def match_by_doi(self, doi: str) -> Optional[str]:
-        """
-        Matches a DOI to a paper_id in the database.
-        Returns paper_id if found, None otherwise.
-        """
-        await self.db.connect()
-        try:
-            # TODO: Add doi column to papers table and implement DOI lookup
-            # For now, return None as we don't have DOI support yet
-            return None
-        except Exception as e:
-            print(f"Error matching DOI: {str(e)}")
-            return None
