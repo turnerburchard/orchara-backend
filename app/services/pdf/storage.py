@@ -29,8 +29,22 @@ class LocalStorage:
             f"{timestamp}_{pdf_file.safe_filename}"
         )
     
-    async def save_file(self, pdf_file: PDFFile, paper_id: str) -> str:
+    async def save_file(self, pdf_file: PDFFile, paper_id: str, metadata: Dict[str, Any] = None, full_text: str = "") -> str:
         """Save file to storage and return the full path"""
+        # Use provided metadata or extract it if not provided
+        if metadata is None:
+            try:
+                metadata = await self.text_service.extract_metadata_from_pdf(pdf_file) or {}
+                full_text = await self.text_service.extract_full_text_from_pdf(pdf_file) or ""
+            except Exception as e:
+                print(f"Error extracting metadata: {str(e)}")
+                metadata = {}
+                full_text = ""
+        
+        title = metadata.get('title', '') if metadata else ''
+        abstract = metadata.get('abstract', '') if metadata else ''
+        authors = metadata.get('authors', '') if metadata else ''
+        
         content = await pdf_file.get_content()
         storage_path = self._generate_storage_path(pdf_file)
         full_path = os.path.join(self.base_path, storage_path)
@@ -41,14 +55,7 @@ class LocalStorage:
         with open(full_path, "wb") as f:
             f.write(content)
         
-        # Extract metadata and full text
-        metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
-        full_text = await self.text_service.extract_full_text_from_pdf(pdf_file)
-        
-        title = metadata.get('title', '') if metadata else ''
-        abstract = metadata.get('abstract', '') if metadata else ''
-        authors = metadata.get('authors', '') if metadata else ''
-        
+        # Update the database
         conn = await get_async_connection()
         try:
             await conn.execute(
@@ -98,7 +105,7 @@ class LocalStorage:
         try:
             rows = await conn.fetch(
                 """
-                SELECT id, user_id, paper_id, file_path, title, abstract, authors, full_text, upload_date 
+                SELECT paper_id, file_path, title, abstract, authors, full_text, upload_date 
                 FROM user_papers 
                 WHERE user_id = $1
                 ORDER BY upload_date DESC
@@ -109,16 +116,13 @@ class LocalStorage:
             for row in rows:
                 if os.path.exists(row['file_path']):
                     papers.append({
-                        'id': row['id'],
-                        'user_id': row['user_id'],
                         'paper_id': row['paper_id'],
                         'title': row['title'] or os.path.splitext(os.path.basename(row['file_path']))[0],
                         'abstract': row['abstract'] or '',
                         'authors': row['authors'] or '',
                         'full_text': row['full_text'] or '',
                         'url': f"/uploads/{user_id}/{os.path.basename(row['file_path'])}",
-                        'file_path': row['file_path'],
-                        'upload_date': row['upload_date'].isoformat() if row['upload_date'] else None
+                        'upload_date': row['upload_date']
                     })
         finally:
             await conn.close()

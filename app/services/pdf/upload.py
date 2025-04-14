@@ -9,7 +9,6 @@ from datetime import datetime
 from app.services.pdf.file import PDFFile
 from app.services.pdf.storage import LocalStorage
 from app.services.pdf.text_extraction import TextExtractionService
-from app.services.pdf.match import MatchService
 from app.utils.db import get_async_connection
 from app.models import PDFUploadResult, Paper
 import logging
@@ -21,59 +20,40 @@ class UploadService:
     def __init__(self):
         self.storage = LocalStorage()
         self.text_service = TextExtractionService()
-        self.match_service = MatchService()
     
     async def process_pdf(self, pdf_file: PDFFile) -> PDFUploadResult:
         """Process a PDF file and store it in the user's papers directory."""
         try:
-            # Generate a unique ID for the paper
             paper_id = str(uuid.uuid4())
-            file_path = await self.storage.save_file(pdf_file, paper_id)
             
-            match_result = await self.match_service.match_paper(pdf_file)
+            metadata = {}
+            full_text = ""
+            try:
+                metadata = await self.extract_metadata(pdf_file)
+                full_text = await self.extract_full_text(pdf_file)
+                logger.info(f"Extracted metadata: {metadata}")
+            except Exception as e:
+                logger.error(f"Error extracting metadata: {str(e)}")
             
-            if match_result.found:
-                # If we found a match, use the existing paper ID
-                paper_id = match_result.paper_id
-                return PDFUploadResult(
-                    success=True,
-                    paper=Paper(
-                        paper_id=paper_id,
-                        title=match_result.title or '',
-                        abstract=match_result.abstract or '',
-                        url=f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
-                    ),
-                    missing_doi=False
-                )
-            else:
-                metadata = {}
-                try:
-                    metadata = await self.extract_metadata(pdf_file, file_path)
-                    logger.info(f"Extracted metadata: {metadata}")
-                except Exception as e:
-                    logger.error(f"Error extracting metadata: {str(e)}")
-                
-                url = f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
-                
-                # Extract and format metadata fields according to schema
-                title = metadata.get('title') if metadata.get('title') else pdf_file.safe_filename
-                abstract = metadata.get('abstract', '')
-                doi = metadata.get('doi', '')
-                
-                # For unmatched papers, we don't insert into the papers table
-                # We just use the UUID as the paper_id in the user_papers table
-                logger.info(f"Created new paper entry: {paper_id}, {title}, {abstract}, {url}")
+            file_path = await self.storage.save_file(pdf_file, paper_id, metadata, full_text)
+            
+            url = f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
+            
+            title = metadata.get('title') if metadata.get('title') else pdf_file.safe_filename
+            abstract = metadata.get('abstract', '')
+            doi = metadata.get('doi', '')
 
-                return PDFUploadResult(
-                    success=True,
-                    paper=Paper(
-                        paper_id=paper_id,
-                        title=title,
-                        abstract=abstract,
-                        url=url
-                    ),
-                    missing_doi=not bool(doi)
-                )
+            # do we really need to return the paper?
+            return PDFUploadResult(
+                success=True,
+                paper=Paper(
+                    paper_id=paper_id,
+                    title=title,
+                    abstract=abstract,
+                    url=url
+                ),
+                missing_doi=not bool(doi)
+            )
         except Exception as e:
             logger.error(f"Error processing PDF {pdf_file.filename}: {str(e)}")
             return PDFUploadResult(
@@ -88,15 +68,24 @@ class UploadService:
                 missing_doi=True
             )
 
-    async def extract_metadata(self, original_pdf: PDFFile, file_path: str) -> Dict[str, Any]:
+    async def extract_metadata(self, original_pdf: PDFFile) -> Dict[str, Any]:
         """Extract metadata from a PDF file using the original PDFFile instance."""
         try:
             metadata = await self.text_service.extract_metadata_from_pdf(original_pdf)
-            logger.info(f"Extracted metadata from {file_path}: {metadata}")
+            logger.info(f"Extracted metadata from {original_pdf.filename}: {metadata}")
             
             return metadata or {}
         except Exception as e:
-            logger.error(f"Error extracting metadata from {file_path}: {str(e)}")
+            logger.error(f"Error extracting metadata from {original_pdf.filename}: {str(e)}")
             return {}
+
+    async def extract_full_text(self, original_pdf: PDFFile) -> str:
+        """Extract full text from a PDF file."""
+        try:
+            full_text = await self.text_service.extract_full_text_from_pdf(original_pdf)
+            return full_text or ""
+        except Exception as e:
+            logger.error(f"Error extracting full text from {original_pdf.filename}: {str(e)}")
+            return ""
 
 
