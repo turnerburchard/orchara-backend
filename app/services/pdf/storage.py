@@ -1,8 +1,9 @@
 import os
-import json
 from datetime import datetime
 from app.services.pdf.file import PDFFile
+from app.services.pdf.text_extraction import TextExtractionService
 from typing import List, Dict, Any
+from app.utils.db import get_async_connection
 
 
 # TODO allow for persistent cloud storage
@@ -11,6 +12,7 @@ class LocalStorage:
         self.base_path = base_path
         os.makedirs(self.base_path, exist_ok=True)
         os.chmod(self.base_path, 0o777) 
+        self.text_service = TextExtractionService()
         
     def _get_user_path(self, user_id: str) -> str:
         """Get the base path for a user's uploads"""
@@ -18,34 +20,6 @@ class LocalStorage:
         os.makedirs(user_path, exist_ok=True)
         os.chmod(user_path, 0o777)
         return user_path
-    
-
-    # TODO move to database
-    def _get_mapping_path(self, user_id: str) -> str:
-        """Get the path to the user's paper ID mapping file"""
-        return os.path.join(self._get_user_path(user_id), "paper_mapping.json")
-    
-    def _load_mapping(self, user_id: str) -> Dict[str, str]:
-        """Load the mapping between filenames and paper IDs"""
-        mapping_path = self._get_mapping_path(user_id)
-        print(f"Loading mapping from {mapping_path}")
-        if os.path.exists(mapping_path):
-            try:
-                with open(mapping_path, 'r') as f:
-                    mapping = json.load(f)
-                    print(f"Loaded mapping: {mapping}")
-                    return mapping
-            except Exception as e:
-                print(f"Error loading mapping: {e}")
-                return {}
-        print("Mapping file does not exist")
-        return {}
-    
-    def _save_mapping(self, user_id: str, mapping: Dict[str, str]):
-        """Save the mapping between filenames and paper IDs"""
-        mapping_path = self._get_mapping_path(user_id)
-        with open(mapping_path, 'w') as f:
-            json.dump(mapping, f)
     
     def _generate_storage_path(self, pdf_file: PDFFile) -> str:
         """Generate a unique storage path for the file"""
@@ -67,32 +41,51 @@ class LocalStorage:
         with open(full_path, "wb") as f:
             f.write(content)
         
-        mapping = self._load_mapping(pdf_file.user_id)
-        mapping[os.path.basename(full_path)] = paper_id
-        self._save_mapping(pdf_file.user_id, mapping)
+        # Extract metadata and full text
+        metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
+        full_text = await self.text_service.extract_full_text_from_pdf(pdf_file)
+        
+        title = metadata.get('title', '') if metadata else ''
+        abstract = metadata.get('abstract', '') if metadata else ''
+        authors = metadata.get('authors', '') if metadata else ''
+        
+        conn = await get_async_connection()
+        try:
+            await conn.execute(
+                """
+                INSERT INTO user_papers (user_id, paper_id, file_path, title, abstract, authors, full_text, upload_date)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (user_id, paper_id) DO UPDATE
+                SET file_path = $3, title = $4, abstract = $5, authors = $6, full_text = $7, upload_date = $8
+                """,
+                pdf_file.user_id, paper_id, full_path, title, abstract, authors, full_text, pdf_file.upload_time
+            )
+        finally:
+            await conn.close()
             
         return full_path
     
     async def delete_file(self, user_id: str, paper_id: str) -> bool:
         """Delete file from storage using user_id and paper_id."""
         try:
-            user_path = self._get_user_path(user_id)
-            mapping = self._load_mapping(user_id)
-            
-            filename = None
-            for fname, pid in mapping.items():
-                if pid == paper_id:
-                    filename = fname
-                    break
-            
-            if filename:
-                file_path = os.path.join(user_path, filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    # Update mapping
-                    del mapping[filename]
-                    self._save_mapping(user_id, mapping)
-                    return True
+            conn = await get_async_connection()
+            try:
+                result = await conn.fetchrow(
+                    "SELECT file_path FROM user_papers WHERE user_id = $1 AND paper_id = $2",
+                    user_id, paper_id
+                )
+                
+                if result and result['file_path']:
+                    file_path = result['file_path']
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        await conn.execute(
+                            "DELETE FROM user_papers WHERE user_id = $1 AND paper_id = $2",
+                            user_id, paper_id
+                        )
+                        return True
+            finally:
+                await conn.close()
             return False
         except Exception as e:
             print(f"Error deleting file: {str(e)}")
@@ -100,26 +93,34 @@ class LocalStorage:
 
     async def get_user_papers(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all papers stored for a user."""
-        user_path = self._get_user_path(user_id)
-        print(f"Looking for papers in {user_path}")
-        mapping = self._load_mapping(user_id)
         papers = []
-        
-        if os.path.exists(user_path):
-            print(f"Found user directory")
-            for filename in os.listdir(user_path):
-                print(f"Found file: {filename}")
-                if filename.endswith('.pdf') and filename in mapping:
-                    print(f"Processing PDF file: {filename} with mapping: {mapping[filename]}")
-                    file_path = os.path.join(user_path, filename)
+        conn = await get_async_connection()
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, user_id, paper_id, file_path, title, abstract, authors, full_text, upload_date 
+                FROM user_papers 
+                WHERE user_id = $1
+                ORDER BY upload_date DESC
+                """,
+                user_id
+            )
+            
+            for row in rows:
+                if os.path.exists(row['file_path']):
                     papers.append({
-                        'paper_id': mapping[filename],
-                        'title': os.path.splitext(filename)[0],
-                        'url': f"/uploads/{user_id}/{filename}",
-                        'abstract': ""
+                        'id': row['id'],
+                        'user_id': row['user_id'],
+                        'paper_id': row['paper_id'],
+                        'title': row['title'] or os.path.splitext(os.path.basename(row['file_path']))[0],
+                        'abstract': row['abstract'] or '',
+                        'authors': row['authors'] or '',
+                        'full_text': row['full_text'] or '',
+                        'url': f"/uploads/{user_id}/{os.path.basename(row['file_path'])}",
+                        'file_path': row['file_path'],
+                        'upload_date': row['upload_date'].isoformat() if row['upload_date'] else None
                     })
-        else:
-            print(f"User directory does not exist")
+        finally:
+            await conn.close()
         
-        print(f"Returning papers: {papers}")
         return papers 

@@ -1,11 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.api.routes import health, search, summarize, upload, user_papers
+from app.utils.db import ensure_user_papers_table_exists
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await ensure_user_papers_table_exists()
+    yield
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API for paper search and summarization",
+    lifespan=lifespan,
 )
 
 # Configure CORS

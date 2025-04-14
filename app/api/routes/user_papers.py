@@ -9,12 +9,6 @@ user_papers_manager = UserPapersManager()
 async def get_user_papers(user_id: str) -> Dict[str, List[Dict[str, Any]]]:
     """
     Get all papers associated with a user.
-    
-    Args:
-        user_id: The ID of the user whose papers to fetch
-        
-    Returns:
-        A dictionary containing a list of papers with their metadata
     """
     try:
         return await user_papers_manager.get_user_papers(user_id)
@@ -25,13 +19,6 @@ async def get_user_papers(user_id: str) -> Dict[str, List[Dict[str, Any]]]:
 async def delete_paper(paper_id: str, user_id: str) -> Dict[str, bool]:
     """
     Delete a paper.
-    
-    Args:
-        paper_id: The ID of the paper to delete
-        user_id: The ID of the user who owns the paper
-        
-    Returns:
-        A dictionary indicating success or failure
     """
     try:
         success = await user_papers_manager.delete_paper(user_id, paper_id)

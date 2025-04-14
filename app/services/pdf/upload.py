@@ -5,13 +5,15 @@ Service for handling PDF uploads and processing.
 from typing import Optional, Dict, Any
 import uuid
 import os
+from datetime import datetime
 from app.services.pdf.file import PDFFile
 from app.services.pdf.storage import LocalStorage
 from app.services.pdf.text_extraction import TextExtractionService
 from app.services.pdf.match import MatchService
-from app.services.database import DatabaseService
+from app.utils.db import get_async_connection
 from app.models import PDFUploadResult, Paper
 import logging
+from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +21,20 @@ class UploadService:
     def __init__(self):
         self.storage = LocalStorage()
         self.text_service = TextExtractionService()
-        self.db = DatabaseService()
         self.match_service = MatchService()
     
     async def process_pdf(self, pdf_file: PDFFile) -> PDFUploadResult:
         """Process a PDF file and store it in the user's papers directory."""
         try:
-            file_path = await self.storage.save_file(pdf_file, str(uuid.uuid4()))
+            # Generate a unique ID for the paper
+            paper_id = str(uuid.uuid4())
+            file_path = await self.storage.save_file(pdf_file, paper_id)
             
             match_result = await self.match_service.match_paper(pdf_file)
             
             if match_result.found:
+                # If we found a match, use the existing paper ID
                 paper_id = match_result.paper_id
-                await self.db.update_paper_file_path(paper_id, file_path)
                 return PDFUploadResult(
                     success=True,
                     paper=Paper(
@@ -43,30 +46,33 @@ class UploadService:
                     missing_doi=False
                 )
             else:
+                metadata = {}
                 try:
-                    metadata = await self.extract_metadata(file_path)
+                    metadata = await self.extract_metadata(pdf_file, file_path)
                     logger.info(f"Extracted metadata: {metadata}")
                 except Exception as e:
                     logger.error(f"Error extracting metadata: {str(e)}")
-                    metadata = {}
                 
-                new_paper = {
-                    'paper_id': str(uuid.uuid4()),
-                    'title': metadata.get('title', pdf_file.safe_filename),
-                    'abstract': metadata.get('abstract', ''),
-                    'file_path': file_path,
-                    'user_id': pdf_file.user_id
-                }
-                await self.db.create_paper(new_paper)
+                url = f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
+                
+                # Extract and format metadata fields according to schema
+                title = metadata.get('title') if metadata.get('title') else pdf_file.safe_filename
+                abstract = metadata.get('abstract', '')
+                doi = metadata.get('doi', '')
+                
+                # For unmatched papers, we don't insert into the papers table
+                # We just use the UUID as the paper_id in the user_papers table
+                logger.info(f"Created new paper entry: {paper_id}, {title}, {abstract}, {url}")
+
                 return PDFUploadResult(
                     success=True,
                     paper=Paper(
-                        paper_id=new_paper['paper_id'],
-                        title=new_paper['title'],
-                        abstract=new_paper['abstract'],
-                        url=f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
+                        paper_id=paper_id,
+                        title=title,
+                        abstract=abstract,
+                        url=url
                     ),
-                    missing_doi=True
+                    missing_doi=not bool(doi)
                 )
         except Exception as e:
             logger.error(f"Error processing PDF {pdf_file.filename}: {str(e)}")
@@ -82,15 +88,10 @@ class UploadService:
                 missing_doi=True
             )
 
-    async def extract_metadata(self, file_path: str) -> Dict[str, Any]:
-        """Extract metadata from a PDF file."""
+    async def extract_metadata(self, original_pdf: PDFFile, file_path: str) -> Dict[str, Any]:
+        """Extract metadata from a PDF file using the original PDFFile instance."""
         try:
-            pdf_file = PDFFile(
-                filename=os.path.basename(file_path),
-                file_path=file_path
-            )
-            
-            metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
+            metadata = await self.text_service.extract_metadata_from_pdf(original_pdf)
             logger.info(f"Extracted metadata from {file_path}: {metadata}")
             
             return metadata or {}
