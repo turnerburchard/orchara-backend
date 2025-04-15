@@ -10,7 +10,7 @@ import numpy as np
 import json
 
 
-# TODO allow for persistent cloud storage
+# TODO allow for persistent cloud storage 
 class LocalStorage:
     def __init__(self, base_path: str = "/app/uploads"):
         self.base_path = base_path
@@ -131,10 +131,14 @@ class LocalStorage:
                                 "DELETE FROM user_papers WHERE user_id = $1 AND paper_id = $2",
                                 user_id, paper_id
                             )
-                            # Delete from papers using DOI
+                            # Delete from papers using DOI or URL pattern for user-generated papers
                             await conn.execute(
-                                "DELETE FROM papers WHERE doi = $1",
-                                paper_id
+                                """
+                                DELETE FROM papers 
+                                WHERE doi = $1 OR (doi IS NULL AND url LIKE $2)
+                                """,
+                                paper_id,
+                                f"/uploads/{user_id}/%"
                             )
                             return True
             finally:
