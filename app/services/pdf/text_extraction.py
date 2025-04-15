@@ -110,7 +110,7 @@ class TextExtractionService:
                 
                 break
         
-        return abstract_text
+        return self._clean_text(abstract_text)
 
     def _clean_text(self, text: str) -> str:
         """Remove extra whitespace and normalize text."""
@@ -126,8 +126,19 @@ class TextExtractionService:
             # Replace null bytes and other problematic characters
             text = text.replace('\x00', '')
             
-            # Normalize whitespace
-            return " ".join(text.split()).strip()
+            # Remove excessive line breaks
+            text = re.sub(r'\n\s*\n', ' ', text)
+            
+            # Replace single line breaks with spaces
+            text = re.sub(r'\n', ' ', text)
+            
+            # Remove multiple spaces
+            text = re.sub(r'\s+', ' ', text)
+            
+            # Fix spacing around punctuation
+            text = re.sub(r'\s+([.,;:!?])', r'\1', text)
+            
+            return text.strip()
         except Exception as e:
             print(f"Error cleaning text: {str(e)}")
             return ""
