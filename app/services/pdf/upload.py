@@ -2,17 +2,14 @@
 Service for handling PDF uploads and processing.
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Tuple
 import uuid
 import os
-from datetime import datetime
 from app.services.pdf.file import PDFFile
 from app.services.pdf.storage import LocalStorage
 from app.services.pdf.text_extraction import TextExtractionService
-from app.utils.db import get_async_connection
 from app.models import PDFUploadResult, Paper
 import logging
-from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
 
@@ -23,27 +20,21 @@ class UploadService:
     
     async def process_pdf(self, pdf_file: PDFFile) -> PDFUploadResult:
         """Process a PDF file and store it in the user's papers directory."""
+        paper_id = str(uuid.uuid4())
+        
+        # Extract metadata and text with error handling
+        metadata, full_text = await self._extract_content(pdf_file)
+        
         try:
-            paper_id = str(uuid.uuid4())
-            
-            metadata = {}
-            full_text = ""
-            try:
-                metadata = await self.extract_metadata(pdf_file)
-                full_text = await self.extract_full_text(pdf_file)
-                logger.info(f"Extracted metadata: {metadata}")
-            except Exception as e:
-                logger.error(f"Error extracting metadata: {str(e)}")
-            
+            # Save the file
             file_path = await self.storage.save_file(pdf_file, paper_id, metadata, full_text)
-            
             url = f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
             
-            title = metadata.get('title') if metadata.get('title') else pdf_file.safe_filename
+            # Prepare paper data
+            title = metadata.get('title') or pdf_file.safe_filename
             abstract = metadata.get('abstract', '')
             doi = metadata.get('doi', '')
-
-            # do we really need to return the paper?
+            
             return PDFUploadResult(
                 success=True,
                 paper=Paper(
@@ -60,32 +51,30 @@ class UploadService:
                 success=False,
                 error=str(e),
                 paper=Paper(
-                    paper_id=str(uuid.uuid4()),
+                    paper_id=paper_id,
                     title=pdf_file.safe_filename,
                     abstract="",
                     url=""
                 ),
                 missing_doi=True
             )
-
-    async def extract_metadata(self, original_pdf: PDFFile) -> Dict[str, Any]:
-        """Extract metadata from a PDF file using the original PDFFile instance."""
+    
+    async def _extract_content(self, pdf_file: PDFFile) -> Tuple[Dict[str, Any], str]:
+        """Extract metadata and full text from a PDF file with error handling."""
+        metadata = {}
+        full_text = ""
+        
         try:
-            metadata = await self.text_service.extract_metadata_from_pdf(original_pdf)
-            logger.info(f"Extracted metadata from {original_pdf.filename}: {metadata}")
-            
-            return metadata or {}
+            metadata = await self.text_service.extract_metadata_from_pdf(pdf_file)
+            logger.info(f"Extracted metadata from {pdf_file.filename}: {metadata}")
         except Exception as e:
-            logger.error(f"Error extracting metadata from {original_pdf.filename}: {str(e)}")
-            return {}
-
-    async def extract_full_text(self, original_pdf: PDFFile) -> str:
-        """Extract full text from a PDF file."""
+            logger.error(f"Error extracting metadata from {pdf_file.filename}: {str(e)}")
+        
         try:
-            full_text = await self.text_service.extract_full_text_from_pdf(original_pdf)
-            return full_text or ""
+            full_text = await self.text_service.extract_full_text_from_pdf(pdf_file)
         except Exception as e:
-            logger.error(f"Error extracting full text from {original_pdf.filename}: {str(e)}")
-            return ""
+            logger.error(f"Error extracting full text from {pdf_file.filename}: {str(e)}")
+        
+        return metadata or {}, full_text or ""
 
 

@@ -43,5 +43,5 @@ async def summarize_papers(request: SummarizePapersRequest):
         return result
         
     except Exception as e:
-        logger.error(f"Error in summarize_papers: {str(e)}")
+        print(f"Error in summarize_papers: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
