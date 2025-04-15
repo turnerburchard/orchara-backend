@@ -17,7 +17,7 @@ class Summarizer:
 
     def __init__(self):
         if not self._initialized:
-            load_dotenv()  # Load environment variables
+            load_dotenv()
             api_key = os.getenv('OPENAI_API_KEY')
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is not set")
@@ -34,50 +34,29 @@ class Summarizer:
         return response.choices[0].message.content
         
     async def summarize_with_citations(self, papers: list[Paper], query: str = None) -> SummaryResult:
-        """
-        Generate a summary with citations for a list of papers.
-        
-        Args:
-            papers: list of Pydantic Paper models, each with:
-                - paper_id: unique identifier
-                - title: paper title
-                - abstract: paper abstract
-                - url: link to the paper
-            query: the original search query that led to these papers
-                
-        Returns:
-            dict with:
-                - summary: text with citations in {{cite:X}} format
-                - citations: list of citation objects with paper details
-        """
-        # Format papers for the prompt
         formatted_papers = []
         for i, paper in enumerate(papers, 1):
             formatted_papers.append(f"Paper {i}: \"{paper.title}\"\nAbstract: {paper.abstract}\n")
         
         papers_text = "\n\n".join(formatted_papers)
         
-        # Make the API call
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                response_format={"type": "json_object"},  # Force JSON response
+                response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": get_summary_system_prompt()},
                     {"role": "user", "content": get_summary_with_citations_prompt(papers_text, query)}
                 ]
             )
             
-            # Parse the response
             result = json.loads(response.choices[0].message.content)
             
-            # Process citations to include full paper info
             processed_citations: List[Citation] = []
             for citation in result.get("citations", []):
-                # Ensure we have a single ID
                 id_num = citation["id"]
                 if not isinstance(id_num, int):
-                    continue  # Skip invalid citations
+                    continue
                     
                 idx = id_num - 1
                 if 0 <= idx < len(papers):
@@ -89,7 +68,6 @@ class Summarizer:
                         context=citation.get("context", "")
                     ))
             
-            # Clean up the summary text by removing spaces before periods
             summary_text = result.get("summary", "")
             summary_text = summary_text.replace(" .", ".")
             

@@ -22,15 +22,12 @@ class UploadService:
         """Process a PDF file and store it in the user's papers directory."""
         paper_id = str(uuid.uuid4())
         
-        # Extract metadata and text with error handling
         metadata, full_text = await self._extract_content(pdf_file)
         
         try:
-            # Save the file
             file_path = await self.storage.save_file(pdf_file, paper_id, metadata, full_text)
             url = f"/uploads/{pdf_file.user_id}/{os.path.basename(file_path)}"
             
-            # Prepare paper data
             title = metadata.get('title') or pdf_file.safe_filename
             abstract = metadata.get('abstract', '')
             doi = metadata.get('doi', '')
